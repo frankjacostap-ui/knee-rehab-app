@@ -325,15 +325,46 @@ export default function App() {
   const [ck, setCk] = useState({})
   const [vw, setVw] = useState("w")
   const [toast, setToast] = useState(null)
+  const DURATIONS = [30, 60, 90, 120]
+  const [timer, setTimer] = useState({ active: false, remaining: 60, total: 60, idx: 1 })
 
   useEffect(() => {
     try { const s = localStorage.getItem("kr3"); if (s) setCk(JSON.parse(s)); } catch(e) {}
     setSd([6,0,1,2,3,4,5][new Date().getDay()] ?? 0)
   }, [])
 
+  useEffect(() => {
+    if (!timer.active) return
+    if (timer.remaining <= 0) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)()
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.frequency.value = 880
+        gain.gain.setValueAtTime(0.3, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5)
+      } catch(e) {}
+      setTimer(t => ({ ...t, active: false }))
+      return
+    }
+    const id = setTimeout(() => setTimer(t => ({ ...t, remaining: t.remaining - 1 })), 1000)
+    return () => clearTimeout(id)
+  }, [timer.active, timer.remaining])
+
   const sv = useCallback((c) => { try { localStorage.setItem("kr3", JSON.stringify(c)); } catch(e) {} }, [])
-  const tg = (k) => { const n = {...ck, [k]: !ck[k]}; setCk(n); sv(n); }
+  const tg = (k) => {
+    const checking = !ck[k]
+    const n = {...ck, [k]: checking}; setCk(n); sv(n)
+    if (checking) setTimer(t => ({ active: true, remaining: t.total, total: t.total, idx: t.idx }))
+  }
   const fl = (m) => { setToast(m); setTimeout(() => setToast(null), 1200); }
+  const cycleTimer = () => {
+    const nextIdx = (timer.idx + 1) % DURATIONS.length
+    const secs = DURATIONS[nextIdx]
+    setTimer({ active: true, remaining: secs, total: secs, idx: nextIdx })
+  }
 
   const wk = WEEKS[sw], dy = wk.days[sd]
   const all = [...dy.rehab, ...dy.workout], tot = all.length
@@ -367,7 +398,7 @@ export default function App() {
         borderBottom: '1px solid ' + C.rule,
         opacity: done ? 0.35 : 1, transition: 'opacity 0.15s ease',
       }}>
-        <button onClick={() => { tg(k); if (!done) fl('Done'); }} style={{
+        <button onClick={() => tg(k)} style={{
           width: 20, height: 20, border: done ? 'none' : '1.5px solid ' + C.text,
           background: done ? C.text : 'transparent', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -454,6 +485,20 @@ export default function App() {
           })}
           <div style={{ borderTop: '1px solid ' + C.rule, paddingTop: 24, paddingBottom: 48 }}></div>
         </div>
+        {timer.active && (
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.text, color: C.bg, zIndex: 200 }}>
+            <div style={{ maxWidth: 520, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.55rem', letterSpacing: '0.25em', textTransform: 'uppercase', opacity: 0.5 }}>Rest</div>
+              <button onClick={cycleTimer} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.bg, padding: '4px 0', fontFamily: fonts.display, fontSize: '2.2rem', lineHeight: 1 }}>
+                {Math.floor(timer.remaining / 60)}:{String(timer.remaining % 60).padStart(2, '0')}
+              </button>
+              <button onClick={() => setTimer(t => ({ ...t, active: false }))} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.25)', color: C.bg, fontFamily: fonts.body, fontSize: '0.55rem', letterSpacing: '0.18em', textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer' }}>Skip</button>
+            </div>
+            <div style={{ height: 3, background: 'rgba(255,255,255,0.15)' }}>
+              <div style={{ height: 3, background: C.bg, width: `${(timer.remaining / timer.total) * 100}%`, transition: 'width 1s linear' }}></div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -466,6 +511,21 @@ export default function App() {
         fontFamily: fonts.body, fontSize: '0.7rem', fontWeight: 600,
         letterSpacing: '0.15em', textTransform: 'uppercase', zIndex: 999,
       }}>{toast}</div>}
+
+      {timer.active && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.text, color: C.bg, zIndex: 200 }}>
+          <div style={{ maxWidth: 520, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '0.55rem', letterSpacing: '0.25em', textTransform: 'uppercase', opacity: 0.5 }}>Rest</div>
+            <button onClick={cycleTimer} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.bg, padding: '4px 0', fontFamily: fonts.display, fontSize: '2.2rem', lineHeight: 1 }}>
+              {Math.floor(timer.remaining / 60)}:{String(timer.remaining % 60).padStart(2, '0')}
+            </button>
+            <button onClick={() => setTimer(t => ({ ...t, active: false }))} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.25)', color: C.bg, fontFamily: fonts.body, fontSize: '0.55rem', letterSpacing: '0.18em', textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer' }}>Skip</button>
+          </div>
+          <div style={{ height: 3, background: 'rgba(255,255,255,0.15)' }}>
+            <div style={{ height: 3, background: C.bg, width: `${(timer.remaining / timer.total) * 100}%`, transition: 'width 1s linear' }}></div>
+          </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px' }}>
         <div style={{ padding: '24px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
